@@ -19,6 +19,7 @@
 </p>
 
 ## DuckDB
+In this project, we will extend Roaring Bitmap to DuckDB, and our prototype's version is 0.10.0.
 DuckDB is a high-performance analytical database system. It is designed to be fast, reliable, portable, and easy to use. DuckDB provides a rich SQL dialect, with support far beyond basic SQL. DuckDB supports arbitrary and nested correlated subqueries, window functions, collations, complex types (arrays, structs), and more. For more information on using DuckDB, please refer to the [DuckDB documentation](https://duckdb.org/docs/).
 
 ## Installation
