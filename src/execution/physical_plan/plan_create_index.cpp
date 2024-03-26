@@ -87,6 +87,9 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalCreateInde
 
 	// actual physical create index operator
 
+	//TODO: Qihan Zhang, here dynamiclly decide which kind of index to create
+
+	//Here it will call the PhysicalCreateARTIndex in physical_create_art_index.cpp
 	auto physical_create_index =
 	    make_uniq<PhysicalCreateARTIndex>(op, op.table, op.info->column_ids, std::move(op.info),
 	                                      std::move(op.unbound_expressions), op.estimated_cardinality, perform_sorting);

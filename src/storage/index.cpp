@@ -38,13 +38,13 @@ Index::Index(const string &name, const string &index_type, IndexConstraintType i
 void Index::InitializeLock(IndexLock &state) {
 	state.index_lock = unique_lock<mutex>(lock);
 }
-
+//Qihan Zhang, here is the entrance of update update type, and insert type
 ErrorData Index::Append(DataChunk &entries, Vector &row_identifiers) {
 	IndexLock state;
 	InitializeLock(state);
 	return Append(state, entries, row_identifiers);
 }
-
+//Qihan Zhang here is the entrance of dropping an existing index
 void Index::CommitDrop() {
 	IndexLock index_lock;
 	InitializeLock(index_lock);
