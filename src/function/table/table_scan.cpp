@@ -277,10 +277,11 @@ static void RewriteIndexExpression(Index &index, LogicalGet &get, Expression &ex
 	ExpressionIterator::EnumerateChildren(
 	    expr, [&](Expression &child) { RewriteIndexExpression(index, get, child, rewrite_possible); });
 }
-// Qihan Zhang: this is the entrance function when you search some data through an ART index
+// Qihan Zhang: this is the entrance function when you create index, search some data through an ART index
 // and  also update delete type
 void TableScanPushdownComplexFilter(ClientContext &context, LogicalGet &get, FunctionData *bind_data_p,
                                     vector<unique_ptr<Expression>> &filters) {
+	printf("Qihan Zhang: this is the entrance function when you create index, search some data through an ART index and also update and delete types.\n");
 	auto &bind_data = bind_data_p->Cast<TableScanBindData>();
 	auto &table = bind_data.table;
 	auto &storage = table.GetStorage();
