@@ -211,7 +211,7 @@ void ColumnData::Select(TransactionData transaction, idx_t vector_index, ColumnS
                         SelectionVector &sel, idx_t &count, const TableFilter &filter) {
 	idx_t scan_count = Scan(transaction, vector_index, state, result);
 	result.Flatten(scan_count);
-	ColumnSegment::FilterSelection(sel, result, filter, count, FlatVector::Validity(result));
+	ColumnSegment::FilterSelection(sel, result, filter, count, FlatVector::Validity(result), rbitmap);
 }
 
 void ColumnData::FilterScan(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
@@ -234,6 +234,17 @@ void ColumnData::Append(BaseStatistics &stats, ColumnAppendState &state, Vector 
 	UnifiedVectorFormat vdata;
 	vector.ToUnifiedFormat(count, vdata);
 	AppendData(stats, state, vdata, count);
+	// nuo: update bitmap data
+	std::cout << "column count: " << this->count << std::endl;
+	// Nuo: add current offset to designated bitmap
+	for (idx_t i = 0; i < count; ++i) {
+		if(this->rbitmap.find(vector.GetValue(i).ToString()) != this->rbitmap.end()){
+			this->rbitmap[vector.GetValue(i).ToString()].add(this->count - 1);
+		} else {
+			this->rbitmap[vector.GetValue(i).ToString()] = roaring::Roaring();
+			this->rbitmap[vector.GetValue(i).ToString()].add(this->count - 1);
+		}
+	}
 }
 
 void ColumnData::Append(ColumnAppendState &state, Vector &vector, idx_t count) {
@@ -241,9 +252,11 @@ void ColumnData::Append(ColumnAppendState &state, Vector &vector, idx_t count) {
 		throw InternalException("ColumnData::Append called on a column with a parent or without stats");
 	}
 	Append(stats->statistics, state, vector, count);
+	// nuo: update bitmap data
 }
 
 bool ColumnData::CheckZonemap(TableFilter &filter) {
+	std::cout << "check zonemap first" << std::endl;
 	if (!stats) {
 		throw InternalException("ColumnData::CheckZonemap called on a column without stats");
 	}

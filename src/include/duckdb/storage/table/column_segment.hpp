@@ -17,6 +17,7 @@
 #include "duckdb/function/compression_function.hpp"
 #include "duckdb/storage/table/segment_base.hpp"
 #include "duckdb/storage/buffer/block_handle.hpp"
+#include <roaring/roaring.hh>
 
 namespace duckdb {
 class ColumnSegment;
@@ -69,7 +70,7 @@ public:
 	void FetchRow(ColumnFetchState &state, row_t row_id, Vector &result, idx_t result_idx);
 
 	static idx_t FilterSelection(SelectionVector &sel, Vector &result, const TableFilter &filter,
-	                             idx_t &approved_tuple_count, ValidityMask &mask);
+	                             idx_t &approved_tuple_count, ValidityMask &mask, std::unordered_map<std::string,roaring::Roaring> &rbitmap);
 
 	//! Skip a scan forward to the row_index specified in the scan state
 	void Skip(ColumnScanState &state);

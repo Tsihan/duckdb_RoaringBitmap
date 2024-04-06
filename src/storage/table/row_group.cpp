@@ -459,6 +459,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 		SelectionVector valid_sel(STANDARD_VECTOR_SIZE);
 		if (TYPE == TableScanType::TABLE_SCAN_REGULAR) {
 			count = state.row_group->GetSelVector(transaction, state.vector_index, valid_sel, max_count);
+			std::cout << "valid_sel: " << valid_sel.ToString(max_count) << std::endl;
 			if (count == 0) {
 				// nothing to scan for this vector, skip the entire vector
 				NextVector(state);
@@ -514,6 +515,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 					auto &col_data = GetColumn(col_idx);
 					col_data.Select(transaction, state.vector_index, state.column_scans[tf_idx], result.data[tf_idx],
 					                sel, approved_tuple_count, *table_filters->filters[tf_idx]);
+					std::cout << "Selection Vector: " << sel.ToString(approved_tuple_count) << std::endl;
 				}
 				for (auto &table_filter : table_filters->filters) {
 					result.data[table_filter.first].Slice(sel, approved_tuple_count);
@@ -717,6 +719,7 @@ void RowGroup::Append(RowGroupAppendState &state, DataChunk &chunk, idx_t append
 	D_ASSERT(chunk.ColumnCount() == GetColumnCount());
 	for (idx_t i = 0; i < GetColumnCount(); i++) {
 		auto &col_data = GetColumn(i);
+		std::cout << chunk.data[i].ToString(append_count) << std::endl;
 		col_data.Append(state.states[i], chunk.data[i], append_count);
 	}
 	state.offset_in_row_group += append_count;

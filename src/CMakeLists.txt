@@ -84,7 +84,8 @@ else()
       duckdb_hyperloglog
       duckdb_fastpforlib
       duckdb_skiplistlib
-      duckdb_mbedtls)
+      duckdb_mbedtls
+      roaring::roaring)
 
   add_library(duckdb SHARED ${ALL_OBJECT_FILES})
   target_link_libraries(duckdb ${DUCKDB_LINK_LIBS})
