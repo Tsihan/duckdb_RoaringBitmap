@@ -354,7 +354,7 @@ static idx_t TemplatedNullSelection(SelectionVector &sel, idx_t &approved_tuple_
 }
 
 idx_t ColumnSegment::FilterSelection(SelectionVector &sel, Vector &result, const TableFilter &filter,
-                                     idx_t &approved_tuple_count, ValidityMask &mask) {
+                                     idx_t &approved_tuple_count, ValidityMask &mask, std::unordered_map<std::string,roaring::Roaring> &rbitmap) {
 	switch (filter.filter_type) {
 	case TableFilterType::CONJUNCTION_OR: {
 		// similar to the CONJUNCTION_AND, but we need to take care of the SelectionVectors (OR all of them)
@@ -365,7 +365,7 @@ idx_t ColumnSegment::FilterSelection(SelectionVector &sel, Vector &result, const
 			SelectionVector temp_sel;
 			temp_sel.Initialize(sel);
 			idx_t temp_tuple_count = approved_tuple_count;
-			idx_t temp_count = FilterSelection(temp_sel, result, *child_filter, temp_tuple_count, mask);
+			idx_t temp_count = FilterSelection(temp_sel, result, *child_filter, temp_tuple_count, mask, rbitmap);
 			// tuples passed, move them into the actual result vector
 			for (idx_t i = 0; i < temp_count; i++) {
 				auto new_idx = temp_sel.get_index(i);
@@ -388,12 +388,13 @@ idx_t ColumnSegment::FilterSelection(SelectionVector &sel, Vector &result, const
 	case TableFilterType::CONJUNCTION_AND: {
 		auto &conjunction_and = filter.Cast<ConjunctionAndFilter>();
 		for (auto &child_filter : conjunction_and.child_filters) {
-			FilterSelection(sel, result, *child_filter, approved_tuple_count, mask);
+			FilterSelection(sel, result, *child_filter, approved_tuple_count, mask, rbitmap);
 		}
 		return approved_tuple_count;
 	}
 	case TableFilterType::CONSTANT_COMPARISON: {
 		auto &constant_filter = filter.Cast<ConstantFilter>();
+		// Nuo: get the bitmap corresponding to the constant filter
 		// the inplace loops take the result as the last parameter
 		switch (result.GetType().InternalType()) {
 		case PhysicalType::UINT8: {
@@ -481,10 +482,26 @@ idx_t ColumnSegment::FilterSelection(SelectionVector &sel, Vector &result, const
 			break;
 		}
 		case PhysicalType::VARCHAR: {
+			// Nuo: simply give bitmap index to the selection filter
 			auto result_flat = FlatVector::GetData<string_t>(result);
 			auto predicate = string_t(StringValue::Get(constant_filter.constant));
-			FilterSelectionSwitch<string_t>(result_flat, predicate, sel, approved_tuple_count,
-			                                constant_filter.comparison_type, mask);
+			// due to the fact that changing ValidityMask to Roaring is complicated,
+			// we assume that all data is valid for now, if not we fall back to normal filter selection.
+			if(!mask.AllValid()) {
+				// roaring::Roaring valid_bitmap = rbitmap & mask;
+				FilterSelectionSwitch<string_t>(result_flat, predicate, sel, approved_tuple_count,
+								constant_filter.comparison_type, mask);
+			} else {
+				// ConvertBitmapToSel(rbitmap, sel);
+				auto target_bitmap = rbitmap[StringValue::Get(constant_filter.constant)];
+				approved_tuple_count = target_bitmap.cardinality();
+				SelectionVector r_sel(approved_tuple_count);
+				idx_t sel_idx = 0;
+				for (auto it = target_bitmap.begin(); it != target_bitmap.end(); ++it) {
+					r_sel.set_index(sel_idx++, *it);
+				}
+				sel.Initialize(r_sel);
+			}
 			break;
 		}
 		case PhysicalType::BOOL: {
@@ -508,7 +525,7 @@ idx_t ColumnSegment::FilterSelection(SelectionVector &sel, Vector &result, const
 		// Apply the filter on the child vector
 		auto &child_vec = StructVector::GetEntries(result)[struct_filter.child_idx];
 		auto &child_mask = FlatVector::Validity(*child_vec);
-		return FilterSelection(sel, *child_vec, *struct_filter.child_filter, approved_tuple_count, child_mask);
+		return FilterSelection(sel, *child_vec, *struct_filter.child_filter, approved_tuple_count, child_mask, rbitmap);
 	}
 	default:
 		throw InternalException("FIXME: unsupported type for filter selection");
