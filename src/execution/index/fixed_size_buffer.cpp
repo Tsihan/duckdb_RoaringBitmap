@@ -2,7 +2,9 @@
 
 #include "duckdb/storage/block_manager.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
-
+/*
+管理固定大小的缓冲区以及处理部分数据块
+*/
 namespace duckdb {
 
 //===--------------------------------------------------------------------===//
