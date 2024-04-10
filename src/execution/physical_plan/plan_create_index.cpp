@@ -33,6 +33,8 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalCreateInde
 	// if we get here and the index type is not ART, we throw an exception
 	// because we don't support any other index type yet. However, an operator extension could have
 	// replaced this part of the plan with a different index creation operator.
+	
+	//Qihan Zhang: here we need to modify the logic to support our new index type
 	if (op.info->index_type != ART::TYPE_NAME) {
 		throw BinderException("Unknown index type: " + op.info->index_type);
 	}
@@ -90,7 +92,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalCreateInde
 	//TODO: Qihan Zhang, here dynamiclly decide which kind of index to create
 
 	//Here it will call the PhysicalCreateARTIndex in physical_create_art_index.cpp
-	printf("Qihan Zhang: future we will create roaring bitmap here.\n");
+	//printf("Qihan Zhang: future we will create roaring bitmap here.\n");
 	auto physical_create_index =
 	    make_uniq<PhysicalCreateARTIndex>(op, op.table, op.info->column_ids, std::move(op.info),
 	                                      std::move(op.unbound_expressions), op.estimated_cardinality, perform_sorting);
