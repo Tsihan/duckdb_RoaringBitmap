@@ -30,14 +30,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalCreateInde
 		}
 	}
 
-	// if we get here and the index type is not ART, we throw an exception
-	// because we don't support any other index type yet. However, an operator extension could have
-	// replaced this part of the plan with a different index creation operator.
-	
-	//Qihan Zhang: here we need to modify the logic to support our new index type
-	if (op.info->index_type != ART::TYPE_NAME) {
-		throw BinderException("Unknown index type: " + op.info->index_type);
-	}
+
 
 	// table scan operator for index key columns and row IDs
 	dependencies.AddDependency(op.table);
@@ -85,6 +78,21 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalCreateInde
 		perform_sorting = false;
 	} else if (op.unbound_expressions[0]->return_type.InternalType() == PhysicalType::VARCHAR) {
 		perform_sorting = false;
+	}
+
+
+	// if we get here and the index type is not ART, we throw an exception
+	// because we don't support any other index type yet. However, an operator extension could have
+	// replaced this part of the plan with a different index creation operator.
+	
+	//Qihan Zhang: here we need to modify the logic to support our new index type
+	//put the index_type examination here
+	if (op.info->index_type != ART::TYPE_NAME) {
+		if(op.info->index_type == "BITMAP"){
+			
+			throw BinderException("BITMAP index type, currently we use this hacky way to return." );
+		}
+		throw BinderException("Unknown index type: " + op.info->index_type);
 	}
 
 	// actual physical create index operator
