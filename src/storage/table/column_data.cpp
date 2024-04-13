@@ -235,16 +235,17 @@ void ColumnData::Append(BaseStatistics &stats, ColumnAppendState &state, Vector 
 	vector.ToUnifiedFormat(count, vdata);
 	AppendData(stats, state, vdata, count);
 	// nuo: update bitmap data
-	std::cout << "column count: " << this->count << std::endl;
+	//Qihan: don't use it for now
+	//std::cout << "column count: fake operation" << this->count << std::endl;
 	// Nuo: add current offset to designated bitmap
-	for (idx_t i = 0; i < count; ++i) {
-		if(this->rbitmap.find(vector.GetValue(i).ToString()) != this->rbitmap.end()){
-			this->rbitmap[vector.GetValue(i).ToString()].add(this->count - 1);
-		} else {
-			this->rbitmap[vector.GetValue(i).ToString()] = roaring::Roaring();
-			this->rbitmap[vector.GetValue(i).ToString()].add(this->count - 1);
-		}
-	}
+	// for (idx_t i = 0; i < count; ++i) {
+	// 	if(this->rbitmap.find(vector.GetValue(i).ToString()) != this->rbitmap.end()){
+	// 		this->rbitmap[vector.GetValue(i).ToString()].add(this->count - 1);
+	// 	} else {
+	// 		this->rbitmap[vector.GetValue(i).ToString()] = roaring::Roaring();
+	// 		this->rbitmap[vector.GetValue(i).ToString()].add(this->count - 1);
+	// 	}
+	// }
 }
 
 void ColumnData::Append(ColumnAppendState &state, Vector &vector, idx_t count) {

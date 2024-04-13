@@ -459,7 +459,9 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 		SelectionVector valid_sel(STANDARD_VECTOR_SIZE);
 		if (TYPE == TableScanType::TABLE_SCAN_REGULAR) {
 			count = state.row_group->GetSelVector(transaction, state.vector_index, valid_sel, max_count);
-			std::cout << "valid_sel: " << valid_sel.ToString(max_count) << std::endl;
+			//Qihan
+			std::cout << "valid_sel: same number" << std::endl;
+			//std::cout << "valid_sel: " << valid_sel.ToString(max_count) << std::endl;
 			if (count == 0) {
 				// nothing to scan for this vector, skip the entire vector
 				NextVector(state);
@@ -719,7 +721,9 @@ void RowGroup::Append(RowGroupAppendState &state, DataChunk &chunk, idx_t append
 	D_ASSERT(chunk.ColumnCount() == GetColumnCount());
 	for (idx_t i = 0; i < GetColumnCount(); i++) {
 		auto &col_data = GetColumn(i);
-		std::cout << chunk.data[i].ToString(append_count) << std::endl;
+		//Qihan
+		//std::cout << "FLAT XXX" << std::endl;
+		// std::cout << chunk.data[i].ToString(append_count) << std::endl;
 		col_data.Append(state.states[i], chunk.data[i], append_count);
 	}
 	state.offset_in_row_group += append_count;
