@@ -3,11 +3,13 @@
 #include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/main/client_context.hpp"
+
 #include "duckdb/main/database_manager.hpp"
 #include "duckdb/storage/index.hpp"
 #include "duckdb/storage/storage_manager.hpp"
 #include "duckdb/storage/table/append_state.hpp"
 #include "duckdb/common/exception/transaction_exception.hpp"
+
 #include <roaring/roaring.hh>
 
 namespace duckdb {
@@ -42,149 +44,111 @@ public:
 
 	unique_ptr<Index> local_index;
 	ArenaAllocator arena_allocator;
-	//vector<BITMAPKey> keys;
+
 	DataChunk key_chunk;
 	vector<column_t> key_column_ids;
 };
 
 unique_ptr<GlobalSinkState> PhysicalCreateBITMAPIndex::GetGlobalSinkState(ClientContext &context) const {
-	// auto state = make_uniq<CreateBITMAPIndexGlobalSinkState>();
+	auto state = make_uniq<CreateBITMAPIndexGlobalSinkState>();
 
-	// // create the global index
-	// auto &storage = table.GetStorage();
-	// state->global_index = make_uniq<BITMAP>(info->index_name, info->constraint_type, storage_ids,
-	//                                      TableIOManager::Get(storage), unbound_expressions, storage.db);
-
-	// return (std::move(state));
+	// create the global index
+	auto &storage = table.GetStorage();
+	// Qihan: todo
+	return (std::move(state));
 }
 
 unique_ptr<LocalSinkState> PhysicalCreateBITMAPIndex::GetLocalSinkState(ExecutionContext &context) const {
-	// auto state = make_uniq<CreateBITMAPIndexLocalSinkState>(context.client);
+	auto state = make_uniq<CreateBITMAPIndexLocalSinkState>(context.client);
 
-	// // create the local index
+	// create the local index
 
-	// auto &storage = table.GetStorage();
-	// state->local_index = make_uniq<BITMAP>(info->index_name, info->constraint_type, storage_ids,
-	//                                     TableIOManager::Get(storage), unbound_expressions, storage.db);
+	auto &storage = table.GetStorage();
 
-	// state->keys = vector<BITMAPKey>(STANDARD_VECTOR_SIZE);
-	// state->key_chunk.Initialize(Allocator::Get(context.client), state->local_index->logical_types);
-
-	// for (idx_t i = 0; i < state->key_chunk.ColumnCount(); i++) {
-	// 	state->key_column_ids.push_back(i);
-	// }
-	// return std::move(state);
+	// Qihan: todo
+	return std::move(state);
 }
 
 SinkResultType PhysicalCreateBITMAPIndex::SinkUnsorted(Vector &row_identifiers, OperatorSinkInput &input) const {
 
-	// auto &l_state = input.local_state.Cast<CreateBITMAPIndexLocalSinkState>();
-	// auto count = l_state.key_chunk.size();
+	auto &l_state = input.local_state.Cast<CreateBITMAPIndexLocalSinkState>();
+	auto count = l_state.key_chunk.size();
 
-	// // get the corresponding row IDs
-	// row_identifiers.Flatten(count);
-	// auto row_ids = FlatVector::GetData<row_t>(row_identifiers);
+	// get the corresponding row IDs
+	row_identifiers.Flatten(count);
+	auto row_ids = FlatVector::GetData<row_t>(row_identifiers);
 
-	// // insert the row IDs
-	// auto &art = l_state.local_index->Cast<BITMAP>();
-	// for (idx_t i = 0; i < count; i++) {
-	// 	if (!art.Insert(art.tree, l_state.keys[i], 0, row_ids[i])) {
-	// 		throw ConstraintException("Data contains duplicates on indexed column(s)");
-	// 	}
-	// }
+	// insert the row IDs
+	// Qihan: todo
 
-	// return SinkResultType::NEED_MORE_INPUT;
+	return SinkResultType::NEED_MORE_INPUT;
 }
 
 SinkResultType PhysicalCreateBITMAPIndex::SinkSorted(Vector &row_identifiers, OperatorSinkInput &input) const {
+	//Qihan: when creating a bitmap index, we don't need to sort the data
 
-	// auto &l_state = input.local_state.Cast<CreateBITMAPIndexLocalSinkState>();
-	// auto &storage = table.GetStorage();
-	// auto &l_index = l_state.local_index;
-
-	// // create an BITMAP from the chunk
-	// auto art =
-	//     make_uniq<BITMAP>(info->index_name, l_index->index_constraint_type, l_index->column_ids, l_index->table_io_manager,
-	//                    l_index->unbound_expressions, storage.db, l_index->Cast<BITMAP>().allocators);
-	// if (!art->ConstructFromSorted(l_state.key_chunk.size(), l_state.keys, row_identifiers)) {
-	// 	throw ConstraintException("Data contains duplicates on indexed column(s)");
-	// }
-
-	// // merge into the local BITMAP
-	// if (!l_index->MergeIndexes(*art)) {
-	// 	throw ConstraintException("Data contains duplicates on indexed column(s)");
-	// }
-
-	// return SinkResultType::NEED_MORE_INPUT;
+	return SinkResultType::NEED_MORE_INPUT;
 }
 
 SinkResultType PhysicalCreateBITMAPIndex::Sink(ExecutionContext &context, DataChunk &chunk,
                                             OperatorSinkInput &input) const {
 
-	// D_ASSERT(chunk.ColumnCount() >= 2);
+	D_ASSERT(chunk.ColumnCount() >= 2);
 
-	// // generate the keys for the given input
-	// auto &l_state = input.local_state.Cast<CreateBITMAPIndexLocalSinkState>();
-	// l_state.key_chunk.ReferenceColumns(chunk, l_state.key_column_ids);
-	// l_state.arena_allocator.Reset();
-	// BITMAP::GenerateKeys(l_state.arena_allocator, l_state.key_chunk, l_state.keys);
+	// generate the keys for the given input
+	auto &l_state = input.local_state.Cast<CreateBITMAPIndexLocalSinkState>();
+	l_state.key_chunk.ReferenceColumns(chunk, l_state.key_column_ids);
+	l_state.arena_allocator.Reset();
 
-	// // insert the keys and their corresponding row IDs
-	// auto &row_identifiers = chunk.data[chunk.ColumnCount() - 1];
-	// if (sorted) {
-	// 	return SinkSorted(row_identifiers, input);
-	// }
-	// return SinkUnsorted(row_identifiers, input);
+	// insert the keys and their corresponding row IDs
+	auto &row_identifiers = chunk.data[chunk.ColumnCount() - 1];
+	if (sorted) {
+		return SinkSorted(row_identifiers, input);
+	}
+	return SinkUnsorted(row_identifiers, input);
 }
 
 SinkCombineResultType PhysicalCreateBITMAPIndex::Combine(ExecutionContext &context,
                                                       OperatorSinkCombineInput &input) const {
+    // Qihan: In bitmap, you don't need to combine the local index to the global index
 
-	// auto &gstate = input.global_state.Cast<CreateBITMAPIndexGlobalSinkState>();
-	// auto &lstate = input.local_state.Cast<CreateBITMAPIndexLocalSinkState>();
-
-	// // merge the local index into the global index
-	// if (!gstate.global_index->MergeIndexes(*lstate.local_index)) {
-	// 	throw ConstraintException("Data contains duplicates on indexed column(s)");
-	// }
-
-	// return SinkCombineResultType::FINISHED;
+	return SinkCombineResultType::FINISHED;
 }
 
 SinkFinalizeType PhysicalCreateBITMAPIndex::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
                                                   OperatorSinkFinalizeInput &input) const {
 
-	// // here, we set the resulting global index as the newly created index of the table
-	// auto &state = input.global_state.Cast<CreateBITMAPIndexGlobalSinkState>();
+	// here, we set the resulting global index as the newly created index of the table
+	auto &state = input.global_state.Cast<CreateBITMAPIndexGlobalSinkState>();
 
-	// // vacuum excess memory and verify
-	// state.global_index->Vacuum();
-	// D_ASSERT(!state.global_index->VerifyAndToString(true).empty());
+	// vacuum excess memory and verify
+	state.global_index->Vacuum();
+	D_ASSERT(!state.global_index->VerifyAndToString(true).empty());
 
-	// auto &storage = table.GetStorage();
-	// if (!storage.IsRoot()) {
-	// 	throw TransactionException("Transaction conflict: cannot add an index to a table that has been altered!");
-	// }
+	auto &storage = table.GetStorage();
+	if (!storage.IsRoot()) {
+		throw TransactionException("Transaction conflict: cannot add an index to a table that has been altered!");
+	}
 
-	// auto &schema = table.schema;
-	// info->column_ids = storage_ids;
-	// auto index_entry = schema.CreateIndex(context, *info, table).get();
-	// if (!index_entry) {
-	// 	D_ASSERT(info->on_conflict == OnCreateConflict::IGNORE_ON_CONFLICT);
-	// 	// index already exists, but error ignored because of IF NOT EXISTS
-	// 	return SinkFinalizeType::READY;
-	// }
-	// auto &index = index_entry->Cast<DuckIndexEntry>();
-	// index.initial_index_size = state.global_index->GetInMemorySize();
+	auto &schema = table.schema;
+	info->column_ids = storage_ids;
+	auto index_entry = schema.CreateIndex(context, *info, table).get();
+	if (!index_entry) {
+		D_ASSERT(info->on_conflict == OnCreateConflict::IGNORE_ON_CONFLICT);
+		// index already exists, but error ignored because of IF NOT EXISTS
+		return SinkFinalizeType::READY;
+	}
+	auto &index = index_entry->Cast<DuckIndexEntry>();
+	index.initial_index_size = state.global_index->GetInMemorySize();
 
-	// index.info = make_shared<IndexDataTableInfo>(storage.info, index.name);
-	// for (auto &parsed_expr : info->parsed_expressions) {
-	// 	index.parsed_expressions.push_back(parsed_expr->Copy());
-	// }
+	index.info = make_shared<IndexDataTableInfo>(storage.info, index.name);
+	for (auto &parsed_expr : info->parsed_expressions) {
+		index.parsed_expressions.push_back(parsed_expr->Copy());
+	}
 
-	// // add index to storage
-	// storage.info->indexes.AddIndex(std::move(state.global_index));
-	// return SinkFinalizeType::READY;
+	// add index to storage
+	storage.info->indexes.AddIndex(std::move(state.global_index));
+	return SinkFinalizeType::READY;
 }
 
 //===--------------------------------------------------------------------===//
@@ -193,7 +157,7 @@ SinkFinalizeType PhysicalCreateBITMAPIndex::Finalize(Pipeline &pipeline, Event &
 
 SourceResultType PhysicalCreateBITMAPIndex::GetData(ExecutionContext &context, DataChunk &chunk,
                                                  OperatorSourceInput &input) const {
-	// return SourceResultType::FINISHED;
+	return SourceResultType::FINISHED;
 }
 
 } // namespace duckdb

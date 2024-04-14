@@ -343,7 +343,7 @@ ClientContext::CreatePreparedStatement(ClientContextLock &lock, const string &qu
 	PhysicalPlanGenerator physical_planner(*this);
 	//Qihan: find out the info  plan.info->index_type
 	std::cout << plan->ToString() << std::endl;
-
+	//TODO： qihan: here is to create the physical plan!!!
 	auto physical_plan = physical_planner.CreatePlan(std::move(plan));
 	profiler.EndPhase();
 
