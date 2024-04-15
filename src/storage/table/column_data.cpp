@@ -1,22 +1,23 @@
 #include "duckdb/storage/table/column_data.hpp"
+
 #include "duckdb/common/exception/transaction_exception.hpp"
+#include "duckdb/common/serializer/binary_deserializer.hpp"
+#include "duckdb/common/serializer/read_stream.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/function/compression_function.hpp"
 #include "duckdb/planner/table_filter.hpp"
 #include "duckdb/storage/data_pointer.hpp"
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/statistics/distinct_statistics.hpp"
+#include "duckdb/storage/table/append_state.hpp"
+#include "duckdb/storage/table/array_column_data.hpp"
 #include "duckdb/storage/table/column_data_checkpointer.hpp"
 #include "duckdb/storage/table/list_column_data.hpp"
+#include "duckdb/storage/table/scan_state.hpp"
 #include "duckdb/storage/table/standard_column_data.hpp"
-#include "duckdb/storage/table/array_column_data.hpp"
 #include "duckdb/storage/table/struct_column_data.hpp"
 #include "duckdb/storage/table/update_segment.hpp"
 #include "duckdb/storage/table_storage_info.hpp"
-#include "duckdb/storage/table/append_state.hpp"
-#include "duckdb/storage/table/scan_state.hpp"
-#include "duckdb/common/serializer/read_stream.hpp"
-#include "duckdb/common/serializer/binary_deserializer.hpp"
 
 namespace duckdb {
 
@@ -94,6 +95,7 @@ idx_t ColumnData::ScanVector(ColumnScanState &state, Vector &result, idx_t remai
 		state.current->InitializeScan(state);
 		state.initialized = true;
 	} else if (!state.initialized) {
+		// Qihan: debug here
 		D_ASSERT(state.current);
 		state.current->InitializeScan(state);
 		state.internal_index = state.current->start;
@@ -230,13 +232,53 @@ void ColumnData::Skip(ColumnScanState &state, idx_t count) {
 	state.Next(count);
 }
 
+void ColumnData::AddRoaringBitmap() {
+
+	ColumnScanState state;
+	state.current = data.GetRootSegment();
+	state.row_index = state.current->start;
+	state.internal_index = state.row_index;
+	state.version = version;
+	state.initialized = false;
+	state.scan_state.reset();
+	state.last_offset = 0;
+
+	idx_t total_rows = this->count;         // 假设 count 保存了整个列的行数
+	Vector result(this->type, true, false); // 创建一个向量用来存储扫描结果
+
+	idx_t processed_rows = 0;
+	while (processed_rows < total_rows) {
+		idx_t rows_to_scan = std::min((idx_t)STANDARD_VECTOR_SIZE, total_rows - processed_rows);
+		result.Flatten(rows_to_scan);
+		idx_t rows_scanned = ScanVector(state, result, rows_to_scan, false);
+		if (rows_scanned == 0)
+			break; // 如果没有更多的行被扫描，结束循环
+
+		// 处理扫描结果
+
+		UnifiedVectorFormat vdata;
+		result.ToUnifiedFormat(rows_scanned, vdata);
+		for (idx_t i = 0; i < rows_scanned; i++) {
+			auto value = result.GetValue(i).ToString();
+			if (this->rbitmap.find(value) != this->rbitmap.end()) {
+				this->rbitmap[value].add(processed_rows + i);
+			} else {
+				this->rbitmap[value] = roaring::Roaring();
+				this->rbitmap[value].add(processed_rows + i);
+			}
+		}
+
+		processed_rows += rows_scanned;
+	}
+}
+
 void ColumnData::Append(BaseStatistics &stats, ColumnAppendState &state, Vector &vector, idx_t count) {
 	UnifiedVectorFormat vdata;
 	vector.ToUnifiedFormat(count, vdata);
 	AppendData(stats, state, vdata, count);
 	// nuo: update bitmap data
-	//Qihan: don't use it for now
-	//std::cout << "column count: fake operation" << this->count << std::endl;
+	// Qihan: don't use it for now
+	// std::cout << "column count: fake operation" << this->count << std::endl;
 	// Nuo: add current offset to designated bitmap
 	// for (idx_t i = 0; i < count; ++i) {
 	// 	if(this->rbitmap.find(vector.GetValue(i).ToString()) != this->rbitmap.end()){
