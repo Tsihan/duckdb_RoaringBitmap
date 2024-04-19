@@ -63,6 +63,8 @@ public:
 	string NodetypeToString(duckdb_libpgquery::PGNodeTag type);
 
 	idx_t ParamCount() const;
+	//Qihan add boolean value
+	bool use_bitmap = false;
 
 private:
 	optional_ptr<Transformer> parent;

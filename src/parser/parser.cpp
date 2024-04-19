@@ -147,14 +147,48 @@ vector<string> SplitQueryStringIntoStatements(const string &query) {
 	return query_statements;
 }
 
+
+// Qihan: Helper function to replace all occurrences of a substring in a string
+void ReplaceSubstring(std::string &str, const std::string &from, const std::string &to) {
+    size_t start_pos = 0;
+    while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
+        str.replace(start_pos, from.length(), to);
+        start_pos += to.length(); // Handles case when 'to' is a substring of 'from'
+    }
+}
+
 void Parser::ParseQuery(const string &query) {
+	//Qihan: this way to find keyword bitmap is hacky, but it's easier than to modify the libpg_query library
+ 	// Convert the query to lowercase for case-insensitive comparison
+	bool use_bitmap = false;
+
+	// Copy the original query for modification
+    std::string modified_query = query;
+    std::string lowercase_query = query;
+    std::transform(lowercase_query.begin(), lowercase_query.end(), lowercase_query.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+
+    // Check if the query contains the "bitmap" keyword
+    if (lowercase_query.find("bitmap") != std::string::npos) {
+        // Replace "bitmap" with "INDEX" in the original query
+
+        ReplaceSubstring(modified_query, "bitmap", "INDEX");
+        // Print the message
+        std::cout << "This index will use bitmap" << std::endl;
+		//Qihan: a hacky way to set the use_bitmap flag to true
+		use_bitmap = true;
+    }
+
 	Transformer transformer(options);
+	if (use_bitmap == true) {
+		transformer.use_bitmap = true;
+	}
 	string parser_error;
 	optional_idx parser_error_location;
 	{
 		// check if there are any unicode spaces in the string
 		string new_query;
-		if (StripUnicodeSpaces(query, new_query)) {
+		if (StripUnicodeSpaces(modified_query, new_query)) {
 			// there are - strip the unicode spaces and re-run the query
 			ParseQuery(new_query);
 			return;
@@ -167,7 +201,7 @@ void Parser::ParseQuery(const string &query) {
 		// which led to some memory issues
 		{
 			PostgresParser parser;
-			parser.Parse(query);
+			parser.Parse(modified_query);
 			if (parser.success) {
 				if (!parser.parse_tree) {
 					// empty statement
@@ -192,10 +226,10 @@ void Parser::ParseQuery(const string &query) {
 			// return here would require refactoring into another function. o.w. will just no-op in order to run wrap up
 			// code at the end of this function
 		} else if (!options.extensions || options.extensions->empty()) {
-			throw ParserException::SyntaxError(query, parser_error, parser_error_location);
+			throw ParserException::SyntaxError(modified_query, parser_error, parser_error_location);
 		} else {
 			// split sql string into statements and re-parse using extension
-			auto query_statements = SplitQueryStringIntoStatements(query);
+			auto query_statements = SplitQueryStringIntoStatements(modified_query);
 			auto stmt_loc = 0;
 			for (auto const &query_statement : query_statements) {
 				ErrorData another_parser_error;
@@ -239,25 +273,25 @@ void Parser::ParseQuery(const string &query) {
 						parsed_single_statement = true;
 						break;
 					} else if (result.type == ParserExtensionResultType::DISPLAY_EXTENSION_ERROR) {
-						throw ParserException::SyntaxError(query, result.error, result.error_location);
+						throw ParserException::SyntaxError(modified_query, result.error, result.error_location);
 					} else {
 						// We move to the next one!
 					}
 				}
 				if (!parsed_single_statement) {
-					throw ParserException::SyntaxError(query, parser_error, parser_error_location);
+					throw ParserException::SyntaxError(modified_query, parser_error, parser_error_location);
 				} // LCOV_EXCL_STOP
 			}
 		}
 	}
 	if (!statements.empty()) {
 		auto &last_statement = statements.back();
-		last_statement->stmt_length = query.size() - last_statement->stmt_location;
+		last_statement->stmt_length = modified_query.size() - last_statement->stmt_location;
 		for (auto &statement : statements) {
-			statement->query = query;
+			statement->query = modified_query;
 			if (statement->type == StatementType::CREATE_STATEMENT) {
 				auto &create = statement->Cast<CreateStatement>();
-				create.info->sql = query.substr(statement->stmt_location, statement->stmt_length);
+				create.info->sql = modified_query.substr(statement->stmt_location, statement->stmt_length);
 			}
 		}
 	}

@@ -493,14 +493,17 @@ idx_t ColumnSegment::FilterSelection(SelectionVector &sel, Vector &result, const
 								constant_filter.comparison_type, mask);
 			} else {
 				// ConvertBitmapToSel(rbitmap, sel);
-				auto target_bitmap = rbitmap[StringValue::Get(constant_filter.constant)];
-				approved_tuple_count = target_bitmap.cardinality();
-				SelectionVector r_sel(approved_tuple_count);
-				idx_t sel_idx = 0;
-				for (auto it = target_bitmap.begin(); it != target_bitmap.end(); ++it) {
-					r_sel.set_index(sel_idx++, *it);
-				}
-				sel.Initialize(r_sel);
+				// auto target_bitmap = rbitmap[StringValue::Get(constant_filter.constant)];
+				// approved_tuple_count = target_bitmap.cardinality();
+				// SelectionVector r_sel(approved_tuple_count);
+				// idx_t sel_idx = 0;
+				// for (auto it = target_bitmap.begin(); it != target_bitmap.end(); ++it) {
+				// 	r_sel.set_index(sel_idx++, *it);
+				// }
+				// sel.Initialize(r_sel);
+				// Qihan: fake operation
+				FilterSelectionSwitch<string_t>(result_flat, predicate, sel, approved_tuple_count,
+								constant_filter.comparison_type, mask);
 			}
 			break;
 		}

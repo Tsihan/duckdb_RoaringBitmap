@@ -281,7 +281,7 @@ static void RewriteIndexExpression(Index &index, LogicalGet &get, Expression &ex
 // and  also update delete type
 void TableScanPushdownComplexFilter(ClientContext &context, LogicalGet &get, FunctionData *bind_data_p,
                                     vector<unique_ptr<Expression>> &filters) {
-	printf("Qihan Zhang: this is the entrance function when you create index, search some data through an ART index and also update and delete types.\n");
+	//printf("Qihan Zhang: this is the entrance function when you create index, search some data through an ART index and also update and delete types.\n");
 	auto &bind_data = bind_data_p->Cast<TableScanBindData>();
 	auto &table = bind_data.table;
 	auto &storage = table.GetStorage();

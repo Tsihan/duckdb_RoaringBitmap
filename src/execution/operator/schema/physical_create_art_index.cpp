@@ -1,5 +1,4 @@
 #include "duckdb/execution/operator/schema/physical_create_art_index.hpp"
-
 #include "duckdb/catalog/catalog_entry/duck_index_entry.hpp"
 #include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"

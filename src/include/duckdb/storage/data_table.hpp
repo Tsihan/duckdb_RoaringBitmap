@@ -67,6 +67,9 @@ public:
 	//! A reference to the database instance
 	AttachedDatabase &db;
 
+	//! Qihan: change to public The row groups of the table
+	shared_ptr<RowGroupCollection> row_groups;
+
 public:
 	//! Returns a list of types of the table
 	vector<LogicalType> GetTypes();
@@ -214,8 +217,7 @@ private:
 private:
 	//! Lock for appending entries to the table
 	mutex append_lock;
-	//! The row groups of the table
-	shared_ptr<RowGroupCollection> row_groups;
+
 	//! Whether or not the data table is the root DataTable for this table; the root DataTable is the newest version
 	//! that can be appended to
 	atomic<bool> is_root;

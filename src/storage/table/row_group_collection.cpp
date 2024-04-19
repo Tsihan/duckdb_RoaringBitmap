@@ -1,19 +1,20 @@
 #include "duckdb/storage/table/row_group_collection.hpp"
-#include "duckdb/storage/table/persistent_table_data.hpp"
+
+#include "duckdb/common/serializer/binary_deserializer.hpp"
 #include "duckdb/execution/expression_executor.hpp"
+#include "duckdb/execution/task_error_manager.hpp"
 #include "duckdb/main/client_context.hpp"
-#include "duckdb/storage/data_table.hpp"
+#include "duckdb/parallel/task_scheduler.hpp"
 #include "duckdb/planner/constraints/bound_not_null_constraint.hpp"
 #include "duckdb/storage/checkpoint/table_data_writer.hpp"
-#include "duckdb/storage/table/row_group_segment_tree.hpp"
+#include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/metadata/metadata_reader.hpp"
 #include "duckdb/storage/table/append_state.hpp"
+#include "duckdb/storage/table/column_checkpoint_state.hpp"
+#include "duckdb/storage/table/persistent_table_data.hpp"
+#include "duckdb/storage/table/row_group_segment_tree.hpp"
 #include "duckdb/storage/table/scan_state.hpp"
 #include "duckdb/storage/table_storage_info.hpp"
-#include "duckdb/common/serializer/binary_deserializer.hpp"
-#include "duckdb/parallel/task_scheduler.hpp"
-#include "duckdb/execution/task_error_manager.hpp"
-#include "duckdb/storage/table/column_checkpoint_state.hpp"
 
 namespace duckdb {
 
@@ -116,6 +117,17 @@ void RowGroupCollection::Verify() {
 	}
 	D_ASSERT(current_total_rows == total_rows.load());
 #endif
+}
+
+// Qihan: add a new method
+unordered_set<RowGroup *> RowGroupCollection::GetAllRowGroups() {
+	unordered_set<RowGroup *> all_row_groups;
+	auto current = row_groups->GetRootSegment();
+	while (current != nullptr) {
+		all_row_groups.insert(current);
+		current = row_groups->GetNextSegment(current);
+	}
+	return all_row_groups;
 }
 
 //===--------------------------------------------------------------------===//
