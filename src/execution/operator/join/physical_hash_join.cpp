@@ -108,6 +108,9 @@ public:
 	void InitializeProbeSpill();
 
 public:
+	// qihan: add this
+	unordered_map<std::string, roaring::Roaring> key_bitmaps; // 存储键对应的位图
+
 	ClientContext &context;
 
 	const idx_t num_threads;
@@ -233,6 +236,8 @@ unique_ptr<LocalSinkState> PhysicalHashJoin::GetLocalSinkState(ExecutionContext 
 
 SinkResultType PhysicalHashJoin::Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const {
 	auto &lstate = input.local_state.Cast<HashJoinLocalSinkState>();
+	// Qihan: add this one to get bitmaps
+	auto &gstate = input.global_state.Cast<HashJoinGlobalSinkState>();
 
 	// resolve the join keys for the right chunk
 	lstate.join_keys.Reset();
@@ -240,6 +245,18 @@ SinkResultType PhysicalHashJoin::Sink(ExecutionContext &context, DataChunk &chun
 
 	// build the HT
 	auto &ht = *lstate.hash_table;
+
+	// Sink 对每个连接键和每一行进行操作
+	for (idx_t col_idx = 0; col_idx < lstate.join_keys.ColumnCount(); col_idx++) {
+		for (idx_t row_idx = 0; row_idx < lstate.join_keys.size(); row_idx++) {
+			auto key_val = lstate.join_keys.data[col_idx].GetValue(row_idx).ToString();
+			if (gstate.key_bitmaps.find(key_val) == gstate.key_bitmaps.end()) {
+				gstate.key_bitmaps[key_val] = roaring::Roaring();
+			}
+			gstate.key_bitmaps[key_val].add(row_idx);
+		}
+	}
+
 	if (payload_types.empty()) {
 		// there are only keys: place an empty chunk in the payload
 		lstate.payload_chunk.SetCardinality(chunk.size());
@@ -610,15 +627,40 @@ OperatorResultType PhysicalHashJoin::ExecuteInternal(ExecutionContext &context, 
 	state.join_keys.Reset();
 	state.probe_executor.Execute(input, state.join_keys);
 
-	// perform the actual probe
-	if (sink.external) {
-		state.scan_structure = sink.hash_table->ProbeAndSpill(state.join_keys, state.join_key_state, input,
-		                                                      *sink.probe_spill, state.spill_state, state.spill_chunk);
-	} else {
-		state.scan_structure = sink.hash_table->Probe(state.join_keys, state.join_key_state);
-	}
-	state.scan_structure->Next(state.join_keys, input, chunk);
-	return OperatorResultType::HAVE_MORE_OUTPUT;
+	// ExecuteInternal 检查位图以确定是否存在潜在的匹配项
+	// Check if any key is valid through bitmap before probing
+    bool any_probe_performed = false;
+    for (idx_t col_idx = 0; col_idx < state.join_keys.ColumnCount(); col_idx++) {
+        for (idx_t row_idx = 0; row_idx < state.join_keys.size(); row_idx++) {
+            auto key_val = state.join_keys.data[col_idx].GetValue(row_idx).ToString();
+            if (sink.key_bitmaps.find(key_val) != sink.key_bitmaps.end() && sink.key_bitmaps[key_val].cardinality() > 0) {
+                // Perform the actual probe
+                if (sink.external) {
+                    state.scan_structure = sink.hash_table->ProbeAndSpill(state.join_keys, state.join_key_state, input,
+                                                                          *sink.probe_spill, state.spill_state, state.spill_chunk);
+                } else {
+                    state.scan_structure = sink.hash_table->Probe(state.join_keys, state.join_key_state);
+                }
+
+                state.scan_structure->Next(state.join_keys, input, chunk);
+                if (!state.scan_structure->PointersExhausted() || chunk.size() > 0) {
+					//Qihan: mostly we go this branch
+                    return OperatorResultType::HAVE_MORE_OUTPUT;
+                }
+                state.scan_structure = nullptr;
+                any_probe_performed = true;
+                break; // Stop processing after first successful probe
+            }
+        }
+        if (any_probe_performed) break; // Stop checking other columns once a probe has been performed
+    }
+
+    if (!any_probe_performed) {
+        // No valid keys were found, all were skipped
+        return OperatorResultType::NEED_MORE_INPUT;
+    }
+	//Qihan: actually we never go here
+    return OperatorResultType::HAVE_MORE_OUTPUT;
 }
 
 //===--------------------------------------------------------------------===//

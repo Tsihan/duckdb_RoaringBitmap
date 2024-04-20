@@ -62,6 +62,8 @@ public:
 public:
 	virtual bool CheckZonemap(ColumnScanState &state, TableFilter &filter) = 0;
 
+	roaring::Roaring GetBitmap(TableFilter &filter);
+
 	BlockManager &GetBlockManager() {
 		return block_manager;
 	}

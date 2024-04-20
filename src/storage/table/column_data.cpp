@@ -209,6 +209,41 @@ idx_t ColumnData::ScanCount(ColumnScanState &state, Vector &result, idx_t count)
 	return ScanVector(state, result, count, false);
 }
 
+roaring::Roaring ColumnData::GetBitmap(TableFilter &filter) {
+	switch (filter.filter_type) {
+		case TableFilterType::CONJUNCTION_AND: {
+			auto &conjunction_and = filter.Cast<ConjunctionAndFilter>();
+			roaring::Roaring global_bitmap;
+			for (int i = 0; i < conjunction_and.child_filters.size(); ++i) {
+				if(conjunction_and.child_filters[i]->filter_type == TableFilterType::IS_NOT_NULL) continue;
+				auto cur_bitmap = GetBitmap(*conjunction_and.child_filters[i]);
+				if (i == 0) global_bitmap = cur_bitmap;
+				else global_bitmap &= cur_bitmap;
+			}
+			return global_bitmap;
+		}	
+		case TableFilterType::CONSTANT_COMPARISON: {
+			auto &constant_filter = filter.Cast<ConstantFilter>();
+			// Nuo: get the bitmap corresponding to the constant filter
+			// the inplace loops take the result as the last parameter
+			switch (constant_filter.constant.type().InternalType()) {
+				case PhysicalType::VARCHAR: {
+					std::cout << "using bitmap index to fetch" << std::endl;
+					return rbitmap[StringValue::Get(constant_filter.constant)];
+				}
+			}
+		}
+		// case TableFilterType::IS_NOT_NULL: {
+		// 	roaring::Roaring ret;
+		// 	return ret;
+		// }
+		default: {
+			roaring::Roaring ret;
+			return ret;
+		}
+	}
+}
+
 void ColumnData::Select(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
                         SelectionVector &sel, idx_t &count, const TableFilter &filter) {
 	idx_t scan_count = Scan(transaction, vector_index, state, result);

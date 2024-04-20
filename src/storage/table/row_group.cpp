@@ -511,17 +511,43 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			if (table_filters) {
 				D_ASSERT(adaptive_filter);
 				D_ASSERT(ALLOW_UPDATES);
+				// Nuo: intersect bitmaps
+				roaring::Roaring global_bitmap;
 				for (idx_t i = 0; i < table_filters->filters.size(); i++) {
 					auto tf_idx = adaptive_filter->permutation[i];
 					auto col_idx = column_ids[tf_idx];
 					auto &col_data = GetColumn(col_idx);
-					col_data.Select(transaction, state.vector_index, state.column_scans[tf_idx], result.data[tf_idx],
-					                sel, approved_tuple_count, *table_filters->filters[tf_idx]);
-					std::cout << "Selection Vector: " << sel.ToString(approved_tuple_count) << std::endl;
+					auto bitmap = col_data.GetBitmap(*table_filters->filters[tf_idx]);
+					// std::cout << "current bitmap: " << bitmap.toString() << std::endl;
+					if(i == 0) global_bitmap = std::move(bitmap);
+					else global_bitmap &= bitmap;
 				}
-				for (auto &table_filter : table_filters->filters) {
-					result.data[table_filter.first].Slice(sel, approved_tuple_count);
+
+				// std::cout << "Done building bitmap: " << global_bitmap.toString() << std::endl;
+
+				// build selection vector
+				approved_tuple_count = global_bitmap.cardinality();
+				SelectionVector r_sel(approved_tuple_count);
+				idx_t sel_idx = 0;
+				for (auto it = global_bitmap.begin(); it != global_bitmap.end(); ++it) {
+					r_sel.set_index(sel_idx++, *it);
 				}
+				sel.Initialize(r_sel);
+
+				// std::cout << "Selection Vector: " << sel.ToString(approved_tuple_count) << std::endl;
+
+				// for (idx_t i = 0; i < table_filters->filters.size(); i++) {
+				// 	auto tf_idx = adaptive_filter->permutation[i];
+				// 	auto col_idx = column_ids[tf_idx];
+				// 	auto &col_data = GetColumn(col_idx);
+				// 	// Nuo: maybe we need to move the storage of bitmap to another layer to save this I/O					
+				// 	col_data.Select(transaction, state.vector_index, state.column_scans[tf_idx], result.data[tf_idx],
+				// 					sel, approved_tuple_count, *table_filters->filters[tf_idx]);
+				// }
+				// std::cout << "Selection Vector: " << sel.ToString(approved_tuple_count) << std::endl;
+				// for (auto &table_filter : table_filters->filters) {
+				// 	result.data[table_filter.first].Slice(sel, approved_tuple_count);
+				// }
 			}
 			if (approved_tuple_count == 0) {
 				// all rows were filtered out by the table filters
@@ -543,7 +569,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			}
 			//! Now we use the selection vector to fetch data for the other columns.
 			for (idx_t i = 0; i < column_ids.size(); i++) {
-				if (!table_filters || table_filters->filters.find(i) == table_filters->filters.end()) {
+				// if (!table_filters || table_filters->filters.find(i) == table_filters->filters.end()) {
 					auto column = column_ids[i];
 					if (column == COLUMN_IDENTIFIER_ROW_ID) {
 						D_ASSERT(result.data[i].GetType().InternalType() == PhysicalType::INT64);
@@ -562,7 +588,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 							                             approved_tuple_count, ALLOW_UPDATES);
 						}
 					}
-				}
+				// }
 			}
 			auto end_time = high_resolution_clock::now();
 			if (adaptive_filter && table_filters->filters.size() > 1) {
