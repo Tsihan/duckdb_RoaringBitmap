@@ -109,6 +109,7 @@ public:
 
 public:
 	// qihan: add this
+	std::mutex map_mutex;  // 添加互斥锁以保护key_bitmaps
 	unordered_map<std::string, roaring::Roaring> key_bitmaps; // 存储键对应的位图
 
 	ClientContext &context;
@@ -249,10 +250,13 @@ SinkResultType PhysicalHashJoin::Sink(ExecutionContext &context, DataChunk &chun
 	// Sink 对每个连接键和每一行进行操作
 	for (idx_t col_idx = 0; col_idx < lstate.join_keys.ColumnCount(); col_idx++) {
 		for (idx_t row_idx = 0; row_idx < lstate.join_keys.size(); row_idx++) {
+
 			auto key_val = lstate.join_keys.data[col_idx].GetValue(row_idx).ToString();
+			std::lock_guard<std::mutex> lock(gstate.map_mutex); 
 			if (gstate.key_bitmaps.find(key_val) == gstate.key_bitmaps.end()) {
 				gstate.key_bitmaps[key_val] = roaring::Roaring();
 			}
+			
 			gstate.key_bitmaps[key_val].add(row_idx);
 		}
 	}
