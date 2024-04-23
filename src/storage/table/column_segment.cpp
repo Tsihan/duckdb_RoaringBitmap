@@ -444,7 +444,7 @@ idx_t ColumnSegment::FilterSelection(SelectionVector &sel, Vector &result, const
 			auto result_flat = FlatVector::GetData<int32_t>(result);
 			auto predicate = IntegerValue::Get(constant_filter.constant);
 			FilterSelectionSwitch<int32_t>(result_flat, predicate, sel, approved_tuple_count,
-			                               constant_filter.comparison_type, mask);
+										constant_filter.comparison_type, mask);
 			break;
 		}
 		case PhysicalType::INT64: {
@@ -483,27 +483,10 @@ idx_t ColumnSegment::FilterSelection(SelectionVector &sel, Vector &result, const
 			break;
 		}
 		case PhysicalType::VARCHAR: {
-			// Nuo: simply give bitmap index to the selection filter
-			// due to the fact that changing ValidityMask to Roaring is complicated,
-			// we assume that all data is valid for now, if not we fall back to normal filter selection.
-			if(!mask.AllValid()) {
-				auto result_flat = FlatVector::GetData<string_t>(result);
-				auto predicate = string_t(StringValue::Get(constant_filter.constant));
-				// roaring::Roaring valid_bitmap = rbitmap & mask;
-				FilterSelectionSwitch<string_t>(result_flat, predicate, sel, approved_tuple_count,
+			auto result_flat = FlatVector::GetData<string_t>(result);
+			auto predicate = string_t(StringValue::Get(constant_filter.constant));
+			FilterSelectionSwitch<string_t>(result_flat, predicate, sel, approved_tuple_count,
 								constant_filter.comparison_type, mask);
-			} else {
-				// std::cout << "using bitmap index to fetch" << std::endl;
-				auto target_bitmap = rbitmap[StringValue::Get(constant_filter.constant)];
-				// std::cout << target_bitmap.toString() << std::endl;
-				approved_tuple_count = target_bitmap.cardinality();
-				SelectionVector r_sel(approved_tuple_count);
-				idx_t sel_idx = 0;
-				for (auto it = target_bitmap.begin(); it != target_bitmap.end(); ++it) {
-					r_sel.set_index(sel_idx++, *it);
-				}
-				sel.Initialize(r_sel);
-			}
 			break;
 		}
 		case PhysicalType::BOOL: {

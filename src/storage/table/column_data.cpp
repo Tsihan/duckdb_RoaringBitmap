@@ -209,14 +209,20 @@ idx_t ColumnData::ScanCount(ColumnScanState &state, Vector &result, idx_t count)
 	return ScanVector(state, result, count, false);
 }
 
-roaring::Roaring ColumnData::GetBitmap(TableFilter &filter) {
+roaring::Roaring ColumnData::GetBitmap(TableFilter &filter, CollectionScanState &state) {
 	switch (filter.filter_type) {
 		case TableFilterType::CONJUNCTION_AND: {
 			auto &conjunction_and = filter.Cast<ConjunctionAndFilter>();
 			roaring::Roaring global_bitmap;
+			// mask it off with column segment offset
+			roaring::Roaring mask_bitmap;
+			idx_t lowerbound = state.vector_index * STANDARD_VECTOR_SIZE;
+			idx_t length = MinValue<idx_t>(STANDARD_VECTOR_SIZE, state.max_row_group_row - lowerbound);
+			mask_bitmap.addRange(lowerbound, lowerbound + length);
 			for (int i = 0; i < conjunction_and.child_filters.size(); ++i) {
 				if(conjunction_and.child_filters[i]->filter_type == TableFilterType::IS_NOT_NULL) continue;
-				auto cur_bitmap = GetBitmap(*conjunction_and.child_filters[i]);
+				auto cur_bitmap = GetBitmap(*conjunction_and.child_filters[i], state);
+				cur_bitmap &= mask_bitmap;
 				if (i == 0) global_bitmap = cur_bitmap;
 				else global_bitmap &= cur_bitmap;
 			}
@@ -227,8 +233,10 @@ roaring::Roaring ColumnData::GetBitmap(TableFilter &filter) {
 			// Nuo: get the bitmap corresponding to the constant filter
 			// the inplace loops take the result as the last parameter
 			switch (constant_filter.constant.type().InternalType()) {
+				case PhysicalType::INT32: {
+					return rbitmap[constant_filter.constant.ToString()];
+				}
 				case PhysicalType::VARCHAR: {
-					std::cout << "using bitmap index to fetch" << std::endl;
 					return rbitmap[StringValue::Get(constant_filter.constant)];
 				}
 			}
@@ -334,7 +342,6 @@ void ColumnData::Append(ColumnAppendState &state, Vector &vector, idx_t count) {
 }
 
 bool ColumnData::CheckZonemap(TableFilter &filter) {
-	std::cout << "check zonemap first" << std::endl;
 	if (!stats) {
 		throw InternalException("ColumnData::CheckZonemap called on a column without stats");
 	}

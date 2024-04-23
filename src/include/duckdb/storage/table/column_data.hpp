@@ -62,7 +62,11 @@ public:
 public:
 	virtual bool CheckZonemap(ColumnScanState &state, TableFilter &filter) = 0;
 
-	roaring::Roaring GetBitmap(TableFilter &filter);
+	roaring::Roaring GetBitmap(TableFilter &filter, CollectionScanState &state);
+	
+	bool hasBitmap() {
+		return rbitmap.size() != 0;
+	}
 
 	BlockManager &GetBlockManager() {
 		return block_manager;
@@ -176,6 +180,8 @@ protected:
 	unique_ptr<SegmentStatistics> stats;
 	//! roaring bitmap
 	std::unordered_map<std::string, roaring::Roaring> rbitmap;
+	//! offset
+	uint64_t offset = 0;
 };
 
 } // namespace duckdb
