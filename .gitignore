@@ -20,7 +20,7 @@
 .DS_store
 # Core files
 #core
-
+*.txt
 #==============================================================================#
 # Explicit files to ignore (only matches one).
 #==============================================================================#
@@ -39,6 +39,8 @@ autoconf/aclocal.m4
 autoconf/autom4te.cache
 /compile_commands.json
 /.wasm
+/databases
+/test_script_550
 
 #==============================================================================#
 # Directories to ignore (do not add trailing '/'s, they skip symlinks).
