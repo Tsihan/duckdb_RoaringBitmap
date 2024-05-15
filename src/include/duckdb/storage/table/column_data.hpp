@@ -16,6 +16,7 @@
 #include "duckdb/storage/table/segment_tree.hpp"
 #include "duckdb/storage/table/column_segment_tree.hpp"
 #include "duckdb/common/mutex.hpp"
+#include <roaring/roaring.hh>
 
 namespace duckdb {
 class ColumnData;
@@ -60,6 +61,12 @@ public:
 
 public:
 	virtual bool CheckZonemap(ColumnScanState &state, TableFilter &filter) = 0;
+
+	roaring::Roaring GetBitmap(TableFilter &filter, CollectionScanState &state);
+	
+	bool hasBitmap() {
+		return rbitmap.size() != 0;
+	}
 
 	BlockManager &GetBlockManager() {
 		return block_manager;
@@ -146,6 +153,9 @@ public:
 	void MergeIntoStatistics(BaseStatistics &other);
 	unique_ptr<BaseStatistics> GetStatistics();
 
+	//Qihan add a new method
+	void AddRoaringBitmap();
+
 protected:
 	//! Append a transient segment
 	void AppendTransientSegment(SegmentLock &l, idx_t start_row);
@@ -168,6 +178,10 @@ protected:
 	idx_t version;
 	//! The stats of the root segment
 	unique_ptr<SegmentStatistics> stats;
+	//! roaring bitmap
+	std::unordered_map<std::string, roaring::Roaring> rbitmap;
+	//! offset
+	uint64_t offset = 0;
 };
 
 } // namespace duckdb

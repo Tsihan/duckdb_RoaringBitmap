@@ -66,6 +66,8 @@ private:
 	vector<shared_ptr<ColumnData>> columns;
 
 public:
+	//Qihan change it to public
+	ColumnData &GetColumn(storage_t c);
 	void MoveToCollection(RowGroupCollection &collection, idx_t new_start);
 	RowGroupCollection &GetCollection() {
 		return collection.get();
@@ -154,7 +156,7 @@ private:
 	shared_ptr<RowVersionManager> &GetVersionInfo();
 	shared_ptr<RowVersionManager> &GetOrCreateVersionInfoPtr();
 
-	ColumnData &GetColumn(storage_t c);
+	
 	idx_t GetColumnCount() const;
 	vector<shared_ptr<ColumnData>> &GetColumns();
 

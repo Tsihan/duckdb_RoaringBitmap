@@ -38,6 +38,8 @@ public:
 	                   idx_t row_start, idx_t total_rows = 0);
 
 public:
+//Qihan: add a new method
+	unordered_set<RowGroup *>GetAllRowGroups();
 	idx_t GetTotalRows() const;
 	Allocator &GetAllocator() const;
 

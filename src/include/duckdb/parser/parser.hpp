@@ -34,6 +34,8 @@ public:
 	//! The parsed SQL statements from an invocation to ParseQuery.
 	vector<unique_ptr<SQLStatement>> statements;
 
+
+
 public:
 	//! Attempts to parse a query into a series of SQL statements. Returns
 	//! whether or not the parsing was successful. If the parsing was

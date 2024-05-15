@@ -1,14 +1,15 @@
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
-#include "duckdb/execution/operator/projection/physical_projection.hpp"
 #include "duckdb/execution/operator/filter/physical_filter.hpp"
+#include "duckdb/execution/operator/order/physical_order.hpp"
+#include "duckdb/execution/operator/projection/physical_projection.hpp"
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 #include "duckdb/execution/operator/schema/physical_create_art_index.hpp"
-#include "duckdb/execution/operator/order/physical_order.hpp"
+#include "duckdb/execution/operator/schema/physical_create_bitmap_index.hpp"
 #include "duckdb/execution/physical_plan_generator.hpp"
-#include "duckdb/planner/operator/logical_create_index.hpp"
-#include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
+#include "duckdb/planner/operator/logical_create_index.hpp"
+#include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/table_filter.hpp"
 
 namespace duckdb {
@@ -28,13 +29,6 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalCreateInde
 		if (!expr->IsConsistent()) {
 			throw BinderException("Index keys cannot contain expressions with side effects.");
 		}
-	}
-
-	// if we get here and the index type is not ART, we throw an exception
-	// because we don't support any other index type yet. However, an operator extension could have
-	// replaced this part of the plan with a different index creation operator.
-	if (op.info->index_type != ART::TYPE_NAME) {
-		throw BinderException("Unknown index type: " + op.info->index_type);
 	}
 
 	// table scan operator for index key columns and row IDs
@@ -85,8 +79,54 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalCreateInde
 		perform_sorting = false;
 	}
 
+	// if we get here and the index type is not ART, we throw an exception
+	// because we don't support any other index type yet. However, an operator extension could have
+	// replaced this part of the plan with a different index creation operator.
+
+	// Qihan Zhang: here we need to modify the logic to support our new index type
+	// put the index_type examination here
+	if (op.info->index_type != ART::TYPE_NAME) {
+		if (op.info->index_type == "BITMAP") {
+
+			auto physical_create_index = make_uniq<PhysicalCreateBITMAPIndex>(
+			    op, op.table, op.info->column_ids, std::move(op.info), std::move(op.unbound_expressions),
+			    op.estimated_cardinality, perform_sorting);
+
+			if (perform_sorting) {
+
+				// optional order operator
+				vector<BoundOrderByNode> orders;
+				vector<idx_t> projections;
+				for (idx_t i = 0; i < new_column_types.size() - 1; i++) {
+					auto col_expr = make_uniq_base<Expression, BoundReferenceExpression>(new_column_types[i], i);
+					orders.emplace_back(OrderType::ASCENDING, OrderByNullType::NULLS_FIRST, std::move(col_expr));
+					projections.emplace_back(i);
+				}
+				projections.emplace_back(new_column_types.size() - 1);
+
+				auto physical_order = make_uniq<PhysicalOrder>(new_column_types, std::move(orders),
+				                                               std::move(projections), op.estimated_cardinality);
+				physical_order->children.push_back(std::move(null_filter));
+
+				physical_create_index->children.push_back(std::move(physical_order));
+			} else {
+
+				// no ordering
+				physical_create_index->children.push_back(std::move(null_filter));
+			}
+
+			return std::move(physical_create_index);
+		} else {
+			throw BinderException("Unknown index type: " + op.info->index_type);
+		}
+	}
+
 	// actual physical create index operator
 
+	// TODO: Qihan Zhang, here dynamiclly decide which kind of index to create
+
+	// Here it will call the PhysicalCreateARTIndex in physical_create_art_index.cpp
+	// printf("Qihan Zhang: future we will create roaring bitmap here.\n");
 	auto physical_create_index =
 	    make_uniq<PhysicalCreateARTIndex>(op, op.table, op.info->column_ids, std::move(op.info),
 	                                      std::move(op.unbound_expressions), op.estimated_cardinality, perform_sorting);

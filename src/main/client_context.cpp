@@ -341,6 +341,8 @@ ClientContext::CreatePreparedStatement(ClientContextLock &lock, const string &qu
 	profiler.StartPhase("physical_planner");
 	// now convert logical query plan into a physical query plan
 	PhysicalPlanGenerator physical_planner(*this);
+	//Qihan: plan now is the logical plan
+	//qihan: here is to create the physical plan!!!
 	auto physical_plan = physical_planner.CreatePlan(std::move(plan));
 	profiler.EndPhase();
 

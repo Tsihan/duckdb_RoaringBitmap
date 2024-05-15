@@ -43,8 +43,13 @@ unique_ptr<CreateStatement> Transformer::TransformCreateIndex(duckdb_libpgquery:
 
 	info->on_conflict = TransformOnConflict(stmt.onconflict);
 	info->expressions = TransformIndexParameters(*stmt.indexParams, stmt.relation->relname);
-
+	//Qihan here we know the index type is ART
+	//So we hacky modify here use the boolean value
 	info->index_type = StringUtil::Upper(string(stmt.accessMethod));
+	//Qihan: add this one to change the index type to bitmap
+	if(this->use_bitmap == true){
+		info->index_type = "BITMAP";
+	}
 
 	if (stmt.relation->schemaname) {
 		info->schema = stmt.relation->schemaname;

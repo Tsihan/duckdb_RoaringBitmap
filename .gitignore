@@ -16,15 +16,23 @@
 # vim swap files
 .*.sw?
 .sw?
+*.txt
 #OS X specific files.
 .DS_store
 # Core files
 #core
+
+/databases
+/test_script_550
+
 *.txt
+
 #==============================================================================#
 # Explicit files to ignore (only matches one).
 #==============================================================================#
 # Various tag programs
+/databases
+
 /tags
 /TAGS
 /GPATH

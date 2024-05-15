@@ -1,22 +1,23 @@
 #include "duckdb/storage/table/column_data.hpp"
+
 #include "duckdb/common/exception/transaction_exception.hpp"
+#include "duckdb/common/serializer/binary_deserializer.hpp"
+#include "duckdb/common/serializer/read_stream.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/function/compression_function.hpp"
 #include "duckdb/planner/table_filter.hpp"
 #include "duckdb/storage/data_pointer.hpp"
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/statistics/distinct_statistics.hpp"
+#include "duckdb/storage/table/append_state.hpp"
+#include "duckdb/storage/table/array_column_data.hpp"
 #include "duckdb/storage/table/column_data_checkpointer.hpp"
 #include "duckdb/storage/table/list_column_data.hpp"
+#include "duckdb/storage/table/scan_state.hpp"
 #include "duckdb/storage/table/standard_column_data.hpp"
-#include "duckdb/storage/table/array_column_data.hpp"
 #include "duckdb/storage/table/struct_column_data.hpp"
 #include "duckdb/storage/table/update_segment.hpp"
 #include "duckdb/storage/table_storage_info.hpp"
-#include "duckdb/storage/table/append_state.hpp"
-#include "duckdb/storage/table/scan_state.hpp"
-#include "duckdb/common/serializer/read_stream.hpp"
-#include "duckdb/common/serializer/binary_deserializer.hpp"
 
 namespace duckdb {
 
@@ -94,6 +95,7 @@ idx_t ColumnData::ScanVector(ColumnScanState &state, Vector &result, idx_t remai
 		state.current->InitializeScan(state);
 		state.initialized = true;
 	} else if (!state.initialized) {
+		// Qihan: debug here
 		D_ASSERT(state.current);
 		state.current->InitializeScan(state);
 		state.internal_index = state.current->start;
@@ -207,11 +209,54 @@ idx_t ColumnData::ScanCount(ColumnScanState &state, Vector &result, idx_t count)
 	return ScanVector(state, result, count, false);
 }
 
+roaring::Roaring ColumnData::GetBitmap(TableFilter &filter, CollectionScanState &state) {
+	switch (filter.filter_type) {
+		case TableFilterType::CONJUNCTION_AND: {
+			auto &conjunction_and = filter.Cast<ConjunctionAndFilter>();
+			roaring::Roaring global_bitmap;
+			// mask it off with column segment offset
+			roaring::Roaring mask_bitmap;
+			idx_t lowerbound = state.vector_index * STANDARD_VECTOR_SIZE;
+			idx_t length = MinValue<idx_t>(STANDARD_VECTOR_SIZE, state.max_row_group_row - lowerbound);
+			mask_bitmap.addRange(lowerbound, lowerbound + length);
+			for (int i = 0; i < conjunction_and.child_filters.size(); ++i) {
+				if(conjunction_and.child_filters[i]->filter_type == TableFilterType::IS_NOT_NULL) continue;
+				auto cur_bitmap = GetBitmap(*conjunction_and.child_filters[i], state);
+				cur_bitmap &= mask_bitmap;
+				if (i == 0) global_bitmap = cur_bitmap;
+				else global_bitmap &= cur_bitmap;
+			}
+			return global_bitmap;
+		}	
+		case TableFilterType::CONSTANT_COMPARISON: {
+			auto &constant_filter = filter.Cast<ConstantFilter>();
+			// Nuo: get the bitmap corresponding to the constant filter
+			// the inplace loops take the result as the last parameter
+			switch (constant_filter.constant.type().InternalType()) {
+				case PhysicalType::INT32: {
+					return rbitmap[constant_filter.constant.ToString()];
+				}
+				case PhysicalType::VARCHAR: {
+					return rbitmap[StringValue::Get(constant_filter.constant)];
+				}
+			}
+		}
+		// case TableFilterType::IS_NOT_NULL: {
+		// 	roaring::Roaring ret;
+		// 	return ret;
+		// }
+		default: {
+			roaring::Roaring ret;
+			return ret;
+		}
+	}
+}
+
 void ColumnData::Select(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
                         SelectionVector &sel, idx_t &count, const TableFilter &filter) {
 	idx_t scan_count = Scan(transaction, vector_index, state, result);
 	result.Flatten(scan_count);
-	ColumnSegment::FilterSelection(sel, result, filter, count, FlatVector::Validity(result));
+	ColumnSegment::FilterSelection(sel, result, filter, count, FlatVector::Validity(result), rbitmap);
 }
 
 void ColumnData::FilterScan(TransactionData transaction, idx_t vector_index, ColumnScanState &state, Vector &result,
@@ -230,10 +275,62 @@ void ColumnData::Skip(ColumnScanState &state, idx_t count) {
 	state.Next(count);
 }
 
+void ColumnData::AddRoaringBitmap() {
+
+	ColumnScanState state;
+	state.current = data.GetRootSegment();
+	state.row_index = state.current->start;
+	state.internal_index = state.row_index;
+	state.version = version;
+	state.initialized = false;
+	state.scan_state.reset();
+	state.last_offset = 0;
+
+	idx_t total_rows = this->count;         // 假设 count 保存了整个列的行数
+	Vector result(this->type, true, false); // 创建一个向量用来存储扫描结果
+
+	idx_t processed_rows = 0;
+	while (processed_rows < total_rows) {
+		idx_t rows_to_scan = std::min((idx_t)STANDARD_VECTOR_SIZE, total_rows - processed_rows);
+		result.Flatten(rows_to_scan);
+		idx_t rows_scanned = ScanVector(state, result, rows_to_scan, false);
+		if (rows_scanned == 0)
+			break; // 如果没有更多的行被扫描，结束循环
+
+		// 处理扫描结果
+
+		UnifiedVectorFormat vdata;
+		result.ToUnifiedFormat(rows_scanned, vdata);
+		for (idx_t i = 0; i < rows_scanned; i++) {
+			auto value = result.GetValue(i).ToString();
+			if (this->rbitmap.find(value) != this->rbitmap.end()) {
+				this->rbitmap[value].add(processed_rows + i);
+			} else {
+				this->rbitmap[value] = roaring::Roaring();
+				this->rbitmap[value].add(processed_rows + i);
+			}
+		}
+
+		processed_rows += rows_scanned;
+	}
+}
+
 void ColumnData::Append(BaseStatistics &stats, ColumnAppendState &state, Vector &vector, idx_t count) {
 	UnifiedVectorFormat vdata;
 	vector.ToUnifiedFormat(count, vdata);
 	AppendData(stats, state, vdata, count);
+	// nuo: update bitmap data
+	// Qihan: don't use it for now
+	// std::cout << "column count: fake operation" << this->count << std::endl;
+	// Nuo: add current offset to designated bitmap
+	// for (idx_t i = 0; i < count; ++i) {
+	// 	if(this->rbitmap.find(vector.GetValue(i).ToString()) != this->rbitmap.end()){
+	// 		this->rbitmap[vector.GetValue(i).ToString()].add(this->count - 1);
+	// 	} else {
+	// 		this->rbitmap[vector.GetValue(i).ToString()] = roaring::Roaring();
+	// 		this->rbitmap[vector.GetValue(i).ToString()].add(this->count - 1);
+	// 	}
+	// }
 }
 
 void ColumnData::Append(ColumnAppendState &state, Vector &vector, idx_t count) {
@@ -241,6 +338,7 @@ void ColumnData::Append(ColumnAppendState &state, Vector &vector, idx_t count) {
 		throw InternalException("ColumnData::Append called on a column with a parent or without stats");
 	}
 	Append(stats->statistics, state, vector, count);
+	// nuo: update bitmap data
 }
 
 bool ColumnData::CheckZonemap(TableFilter &filter) {

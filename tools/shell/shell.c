@@ -13205,6 +13205,7 @@ static int shell_exec(
       }
 
       bind_prepared_stmt(pArg, pStmt);
+      // FIXME Qihan: here is the error point
       exec_prepared_stmt(pArg, pStmt);
       explain_data_delete(pArg);
       eqp_render(pArg);
