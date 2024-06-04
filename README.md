@@ -1,3 +1,4 @@
+This is our CSCI 550 project, and we support Roaring-Bitmp in DuckDB internal.
 <div align="center">
   <img src="https://duckdb.org/images/logo-dl/DuckDB_Logo-stacked.svg" height="120">
 </div>
